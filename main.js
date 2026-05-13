@@ -28,6 +28,18 @@ camera.position.set(0, 3, 10);
 
 controls.target.set(0, 0, 0);
 
+controls.enablePan = true;
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+
+function onWindowResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+window.addEventListener('resize', onWindowResize);
 
 
 // LIGHTS
@@ -53,6 +65,65 @@ const gridHelper = new THREE.GridHelper(20, 20);
 scene.add(gridHelper);
 
 
+//LANES
+
+const lanes = [-6, 0, 6];
+let currentLane = 1;
+
+//GROUND
+const groundGeometry = new THREE.PlaneGeometry(24, 50);
+const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x444444 });
+
+const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+
+const lineGeometry = new THREE.PlaneGeometry(0.2, 50);
+const lineMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff });
+
+const leftLine = new THREE.Mesh(lineGeometry, lineMaterial);
+leftLine.rotation.x = -Math.PI / 2;
+leftLine.position.set(9, 0.01, 0);
+scene.add(leftLine);
+
+const rightLine = new THREE.Mesh(lineGeometry, lineMaterial);
+rightLine.rotation.x = -Math.PI / 2;
+rightLine.position.set(-9, 0.01, 0);
+scene.add(rightLine);
+
+const dotGeometry = new THREE.PlaneGeometry(0.2, 1);
+const dotMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff });
+
+function createDottedLine(x) {
+  const group = new THREE.Group();
+
+  for (let i = -25; i < 25; i += 2) { // spacing = gap
+    const dot = new THREE.Mesh(dotGeometry, dotMaterial);
+    dot.rotation.x = -Math.PI / 2;
+    dot.position.set(x, 0.01, i);
+    group.add(dot);
+  }
+
+  scene.add(group);
+}
+
+/*const midLeftLine = new THREE.Mesh(lineGeometry, lineMaterial);
+midLeftLine.rotation.x = -Math.PI / 2;
+midLeftLine.position.set(-3, 0.01, 0);
+scene.add(midLeftLine);
+
+const midRightLine = new THREE.Mesh(lineGeometry, lineMaterial);
+midRightLine.rotation.x = -Math.PI / 2;
+midRightLine.position.set(3, 0.01, 0);
+scene.add(midRightLine);*/
+
+createDottedLine(-3);
+createDottedLine(3);
+
+// rotate so it lies flat (important!)
+ground.rotation.x = -Math.PI / 2;
+
+ground.position.y = 0;
+
+scene.add(ground);
 
 // LOAD BANANA CAR
 const loader = new GLTFLoader();
@@ -74,9 +145,9 @@ loader.load(
 
     scene.add(bananaCar);
 
-    const box = new THREE.BoxHelper(bananaCar, 0xff0000);
+   /* const box = new THREE.BoxHelper(bananaCar, 0xff0000);
 
-    scene.add(box);
+    scene.add(box); */
   },
 
   undefined,
@@ -106,9 +177,9 @@ loader.load(
 
     scene.add(policeCar);
 
-    const box = new THREE.BoxHelper(policeCar, 0xff0000);
+  /*  const box = new THREE.BoxHelper(policeCar, 0xff0000);
 
-    scene.add(box);
+    scene.add(box);*/
   },
 
   undefined,
@@ -120,11 +191,36 @@ loader.load(
 
 
 
+//CONTORLS
+window.addEventListener('keydown', (event) => {
+  if (!bananaCar) return;
+
+  if ((event.key === 'a') || (event.key === 'ArrowLeft')) {
+    if (currentLane != 2) {
+        currentLane = Math.max(0, currentLane + 1);
+    }
+  }
+
+  if ((event.key === 'd') || (event.key === 'ArrowRight')) {
+    if (currentLane != 0) {
+    currentLane = Math.min(2, currentLane - 1);
+  }
+
+}
+});
+
+
 
 // ANIMATE
 function animate() {
 
   requestAnimationFrame(animate);
+
+  if (bananaCar) {
+    bananaCar.position.x +=
+      (lanes[currentLane] - bananaCar.position.x) * 0.15;
+  }
+
 
   controls.update();
 
