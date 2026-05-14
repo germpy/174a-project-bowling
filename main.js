@@ -92,14 +92,17 @@ scene.add(rightLine);
 const dotGeometry = new THREE.PlaneGeometry(0.2, 1);
 const dotMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff });
 
+let dots = [];
+
 function createDottedLine(x) {
   const group = new THREE.Group();
 
-  for (let i = -25; i < 25; i += 2) { // spacing = gap
+  for (let i = -26; i < 26; i += 2) { // spacing = gap
     const dot = new THREE.Mesh(dotGeometry, dotMaterial);
     dot.rotation.x = -Math.PI / 2;
     dot.position.set(x, 0.01, i);
     group.add(dot);
+    dots.push(dot);
   }
 
   scene.add(group);
@@ -209,6 +212,14 @@ window.addEventListener('keydown', (event) => {
 }
 });
 
+function translationMatrix(tx, ty, tz) {
+	return new THREE.Matrix4().set(
+		1, 0, 0, tx,
+		0, 1, 0, ty,
+		0, 0, 1, tz,
+		0, 0, 0, 1
+	);
+}
 
 
 // ANIMATE
@@ -221,10 +232,23 @@ function animate() {
       (lanes[currentLane] - bananaCar.position.x) * 0.15;
   }
 
+  for (let i = 0; i < dots.length; i ++ ) {
+    console.log(dots[i].position.y);
+      if (dots[i].position.z < -25) {
+        // dots[i].visible = false;
+        dots[i].position.z = 25;
+      } else {
+        dots[i].position.z -= 0.2;
+      }
+
+
+
+  }
 
   controls.update();
 
   renderer.render(scene, camera);
 }
+
 
 animate();
