@@ -24,13 +24,11 @@ document.body.appendChild(renderer.domElement);
 // CAMERA CONTROLS
 const controls = new OrbitControls(camera, renderer.domElement);
 
-camera.position.set(0, 3, 10);
+camera.position.set(0, 8.8, -10);
 
-controls.target.set(0, 0, 0);
+controls.target.set(0, 1.2, 0);
 
-controls.enablePan = true;
-controls.enableDamping = true;
-controls.dampingFactor = 0.05;
+controls.enabled = false;
 
 function onWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -55,28 +53,44 @@ scene.add(directionalLight);
 
 
 
-// HELPERS
-const axesHelper = new THREE.AxesHelper(5);
+scene.fog = new THREE.Fog(0x222222, 40, 80);
 
-scene.add(axesHelper);
+const clock = new THREE.Clock();
+const cycleDuration = 60;
+const dayColor = new THREE.Color(0x87ceeb);
+const nightColor = new THREE.Color(0x0a0a20);
 
-const gridHelper = new THREE.GridHelper(20, 20);
+const sunMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(3, 16, 16),
+  new THREE.MeshBasicMaterial({ color: 0xffeebb })
+);
+scene.add(sunMesh);
 
-scene.add(gridHelper);
 
 
 //LANES
 
 const lanes = [-6, 0, 6];
 let currentLane = 1;
+let totalDistance = 0;
+let path = [{d: 0, lane: 1}];
+const POLICE_GAP = 9;
 
 //GROUND
-const groundGeometry = new THREE.PlaneGeometry(24, 50);
+const grass = new THREE.Mesh(
+  new THREE.PlaneGeometry(500, 500),
+  new THREE.MeshLambertMaterial({ color: 0x3a6b1f })
+);
+grass.rotation.x = -Math.PI / 2;
+grass.position.y = -0.05;
+scene.add(grass);
+
+const groundGeometry = new THREE.PlaneGeometry(24, 200);
 const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x444444 });
 
 const ground = new THREE.Mesh(groundGeometry, groundMaterial);
 
-const lineGeometry = new THREE.PlaneGeometry(0.2, 50);
+const lineGeometry = new THREE.PlaneGeometry(0.2, 200);
 const lineMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff });
 
 const leftLine = new THREE.Mesh(lineGeometry, lineMaterial);
@@ -97,7 +111,7 @@ let dots = [];
 function createDottedLine(x) {
   const group = new THREE.Group();
 
-  for (let i = -26; i < 26; i += 2) { // spacing = gap
+  for (let i = -100; i < 100; i += 2) {
     const dot = new THREE.Mesh(dotGeometry, dotMaterial);
     dot.rotation.x = -Math.PI / 2;
     dot.position.set(x, 0.01, i);
@@ -132,19 +146,27 @@ scene.add(ground);
 const loader = new GLTFLoader();
 
 let bananaCar;
+const bananaWheels = [];
 
 loader.load(
   './assets/banana_car.glb',
 
   function (gltf) {
-
-    console.log(gltf.scene);
-
     bananaCar = gltf.scene;
 
     bananaCar.position.set(0, 1.6, 0);
 
    bananaCar.scale.set(0.008, 0.008,0.008);
+
+    for (const name of ['tire', 'tire_2', 'tire_3']) {
+      const wheel = bananaCar.getObjectByName(name);
+      wheel.geometry.computeBoundingBox();
+      const center = new THREE.Vector3();
+      wheel.geometry.boundingBox.getCenter(center);
+      wheel.geometry.translate(-center.x, -center.y, -center.z);
+      wheel.position.add(center);
+      bananaWheels.push(wheel);
+    }
 
     scene.add(bananaCar);
 
@@ -164,19 +186,34 @@ loader.load(
 // LOAD POLICE CAR
 
 let policeCar;
+const policeWheels = [];
 
 loader.load(
   './assets/police_car.glb',
 
   function (gltf) {
-
-    console.log(gltf.scene);
-
     policeCar = gltf.scene;
 
     policeCar.position.set(0, 0, -9);
 
    policeCar.scale.set(2, 2, 2);
+
+    const policeWheelNames = ['Cop_BackWheels_Cylinder001', 'Cop_FrontLeftWheel_Cylinder011', 'Cop_FrontRightWheel_Cylinder012'];
+    for (const name of policeWheelNames) {
+      const wheel = policeCar.getObjectByName(name);
+      const bbox = new THREE.Box3();
+      for (const child of wheel.children) {
+        child.geometry.computeBoundingBox();
+        bbox.union(child.geometry.boundingBox);
+      }
+      const center = new THREE.Vector3();
+      bbox.getCenter(center);
+      for (const child of wheel.children) {
+        child.geometry.translate(-center.x, -center.y, -center.z);
+      }
+      wheel.position.add(center);
+      policeWheels.push(wheel);
+    }
 
     scene.add(policeCar);
 
@@ -194,19 +231,104 @@ loader.load(
 
 
 
+const baseSpeed = 0.2;
+let speed = baseSpeed;
+let score = 0;
+let gameOver = false;
+
+const hud = document.getElementById('hud');
+const overlay = document.getElementById('gameOver');
+const finalScoreEl = document.getElementById('finalScore');
+const bananaBox = new THREE.Box3();
+const obstacleBox = new THREE.Box3();
+
+const ROW_SPACING = 18;
+const NUM_ROWS = 5;
+const WRAP = ROW_SPACING * NUM_ROWS;
+
+const obstacles = [];
+const obstacleSpecs = {
+  cone:    { file: 'traffic_cone.glb',    scale: 10,  y: 0.75 },
+  barrier: { file: 'traffic_barrier.glb', scale: 0.5, y: 2    },
+  street:  { file: 'streetlight.glb',     scale: 12,  y: 0    },
+};
+
+const plan = [];
+for (let i = 0; i < NUM_ROWS; i++) {
+  plan.push({
+    type: i % 2 ? 'barrier' : 'cone',
+    x: lanes[Math.floor(Math.random() * 3)],
+    z: 10 + i * ROW_SPACING,
+    lane: true,
+  });
+}
+for (let i = 0; i < 4; i++) {
+  const side = i % 2 ? 10.5 : -10.5;
+  plan.push({
+    type: 'street',
+    x: side,
+    z: 10 + i * 22,
+    rotY: side < 0 ? Math.PI : 0,
+  });
+}
+
+for (const [type, spec] of Object.entries(obstacleSpecs)) {
+  loader.load(`./assets/${spec.file}`, gltf => {
+    gltf.scene.scale.setScalar(spec.scale);
+    for (const p of plan) {
+      if (p.type !== type) continue;
+      const m = gltf.scene.clone();
+      m.position.set(p.x, spec.y, p.z);
+      if (p.rotY) m.rotation.y = p.rotY;
+      if (p.lane) m.userData.lane = true;
+      m.userData.startX = p.x;
+      m.userData.startZ = p.z;
+      scene.add(m);
+      obstacles.push(m);
+    }
+  });
+}
+
+
+function restart() {
+  score = 0;
+  speed = baseSpeed;
+  gameOver = false;
+  currentLane = 1;
+  totalDistance = 0;
+  path = [{d: 0, lane: 1}];
+  clock.start();
+  for (const o of obstacles) {
+    o.position.z = o.userData.startZ;
+    if (o.userData.lane) {
+      o.position.x = lanes[Math.floor(Math.random() * 3)];
+    } else {
+      o.position.x = o.userData.startX;
+    }
+  }
+  if (bananaCar) bananaCar.position.x = 0;
+  if (policeCar) policeCar.position.x = 0;
+  overlay.style.display = 'none';
+}
+
+document.getElementById('restart').addEventListener('click', restart);
+
+
 //CONTORLS
 window.addEventListener('keydown', (event) => {
-  if (!bananaCar) return;
+  if (!bananaCar || gameOver) return;
 
   if ((event.key === 'a') || (event.key === 'ArrowLeft')) {
     if (currentLane != 2) {
         currentLane = Math.max(0, currentLane + 1);
+        path.push({d: totalDistance, lane: currentLane});
     }
   }
 
   if ((event.key === 'd') || (event.key === 'ArrowRight')) {
     if (currentLane != 0) {
     currentLane = Math.min(2, currentLane - 1);
+    path.push({d: totalDistance, lane: currentLane});
   }
 
 }
@@ -227,22 +349,90 @@ function animate() {
 
   requestAnimationFrame(animate);
 
-  if (bananaCar) {
-    bananaCar.position.x +=
-      (lanes[currentLane] - bananaCar.position.x) * 0.15;
-  }
+  if (!gameOver) {
+    const t = clock.getElapsedTime();
 
-  for (let i = 0; i < dots.length; i ++ ) {
-    console.log(dots[i].position.y);
-      if (dots[i].position.z < -25) {
-        // dots[i].visible = false;
-        dots[i].position.z = 25;
-      } else {
-        dots[i].position.z -= 0.2;
+    speed = baseSpeed + score * 0.00015;
+    score++;
+    totalDistance += speed;
+    hud.textContent = `Score: ${Math.floor(score)}`;
+
+    if (bananaCar) {
+      const targetX = lanes[currentLane];
+      bananaCar.position.x += (targetX - bananaCar.position.x) * 0.15;
+      bananaCar.rotation.z = (targetX - bananaCar.position.x) * -0.04;
+      bananaCar.position.y = 1.6 + Math.sin(t * 1) * 0.04;
+      bananaCar.rotation.x = Math.sin(t * 1) * 0.04;
+      camera.position.x = bananaCar.position.x;
+      controls.target.x = bananaCar.position.x;
+    }
+
+    if (policeCar) {
+      const targetDist = totalDistance - POLICE_GAP;
+      while (path.length > 1 && path[1].d <= targetDist) {
+        path.shift();
+      }
+      let policeLane = path[0].lane;
+      for (let i = path.length - 1; i >= 0; i--) {
+        if (path[i].d <= targetDist) {
+          policeLane = path[i].lane;
+          break;
+        }
       }
 
+      policeCar.position.x += (lanes[policeLane] - policeCar.position.x) * 0.15;
+      policeCar.position.y = Math.sin(t * 10 + 1) * 0.01;
+      policeCar.rotation.x = Math.sin(t * 7 + 0.5) * 0.01;
+    }
 
+    camera.position.y = 8.8 + Math.sin(t * 11) * 0.02;
 
+    const spin = speed * 0.5;
+    for (const w of bananaWheels) w.rotation.x += spin;
+    for (const w of policeWheels) w.rotation.x += spin;
+
+    const phase = (t / cycleDuration) * Math.PI * 2;
+    const sunY = Math.sin(phase);
+    const dayFactor = Math.max(0, sunY);
+    directionalLight.position.set(Math.cos(phase) * 50, sunY * 50, 0);
+    directionalLight.intensity = dayFactor * 2;
+    ambientLight.intensity = 0.3 + dayFactor * 1.7;
+    scene.background.lerpColors(nightColor, dayColor, dayFactor);
+    scene.fog.color.copy(scene.background);
+    sunMesh.position.copy(directionalLight.position);
+    sunMesh.visible = sunY > -0.1;
+
+    for (let i = 0; i < dots.length; i++) {
+      dots[i].position.z = dots[i].position.z < -100 ? 100 : dots[i].position.z - speed;
+    }
+
+    for (const o of obstacles) {
+      o.position.z -= speed;
+      if (o.position.z < -20) {
+        o.position.z += WRAP;
+        if (o.userData.lane) {
+          const cur = lanes.indexOf(o.position.x);
+          let next;
+          do { next = Math.floor(Math.random() * 3); } while (next === cur);
+          o.position.x = lanes[next];
+        }
+      }
+    }
+
+    if (bananaCar) {
+      bananaBox.setFromObject(bananaCar);
+      bananaBox.expandByScalar(-0.3);
+      for (const o of obstacles) {
+        if (!o.userData.lane) continue;
+        obstacleBox.setFromObject(o);
+        if (bananaBox.intersectsBox(obstacleBox)) {
+          gameOver = true;
+          finalScoreEl.textContent = `Score: ${Math.floor(score)}`;
+          overlay.style.display = 'flex';
+          break;
+        }
+      }
+    }
   }
 
   controls.update();
