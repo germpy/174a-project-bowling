@@ -202,6 +202,8 @@ loader.load(
     child.castShadow = true;
     child.receiveShadow = true;
   }
+
+  
 });
 
     scene.add(bananaCar);
@@ -217,6 +219,18 @@ loader.load(
     console.error(error);
   }
 );
+
+const carLight = new THREE.SpotLight(0xffffff, 0);
+carLight.angle = Math.PI/6;
+
+carLight.position.set(0,1,1);
+let targetObject = new THREE.Object3D();
+targetObject.position.set(0,2,20);
+carLight.target = targetObject;
+carLight.add(targetObject);
+carLight.add(new THREE.SpotLightHelper(carLight));
+
+scene.add(carLight);
 
 
 // LOAD POLICE CAR
@@ -443,6 +457,10 @@ function animate() {
       bananaCar.rotation.x = Math.sin(t * 1) * 0.04;
       camera.position.x = bananaCar.position.x;
       controls.target.x = bananaCar.position.x;
+      
+       console.log(carLight.target.position);
+      carLight.position.x = bananaCar.position.x;
+      carLight.position.y = bananaCar.position.y;
     }
 
     if (policeCar) {
@@ -472,6 +490,7 @@ function animate() {
     const phase = (t / cycleDuration) * Math.PI * 2;
     const sunY = Math.sin(phase);
     const dayFactor = Math.max(0, sunY);
+    const night = (dayFactor < 0.2);
     directionalLight.position.set(Math.cos(phase) * 50, sunY * 50, 0);
     directionalLight.intensity = dayFactor * 2;
     ambientLight.intensity = 0.3 + dayFactor * 1.7;
@@ -479,6 +498,12 @@ function animate() {
     scene.fog.color.copy(scene.background);
     sunMesh.position.copy(directionalLight.position);
     sunMesh.visible = sunY > -0.1;
+
+    if (night) {
+      carLight.intensity = 1000 - (5000 * dayFactor);
+    } else {
+      carLight.intensity = 0;
+    }
 
     for (let i = 0; i < dots.length; i++) {
       dots[i].position.z = dots[i].position.z < -100 ? 100 : dots[i].position.z - speed;
