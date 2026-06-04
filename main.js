@@ -277,11 +277,13 @@ loader.load(
 const baseSpeed = 0.2;
 let speed = baseSpeed;
 let score = 0;
+let highScore = 0;
 let gameOver = false;
 
 const hud = document.getElementById('hud');
 const overlay = document.getElementById('gameOver');
 const finalScoreEl = document.getElementById('finalScore');
+const highScoreEl = document.getElementById('highScore');
 const bananaBox = new THREE.Box3();
 const obstacleBox = new THREE.Box3();
 
@@ -506,6 +508,8 @@ function animate() {
         if (bananaBox.intersectsBox(obstacleBox)) {
           gameOver = true;
           finalScoreEl.textContent = `Score: ${Math.floor(score)}`;
+          highScore = Math.max(score, highScore);
+          highScoreEl.textContent = `High Score: ${Math.floor(highScore)}`
           overlay.style.display = 'flex';
           break;
          }
