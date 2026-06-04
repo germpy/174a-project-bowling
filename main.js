@@ -72,7 +72,7 @@ scene.add(directionalLight);
 scene.fog = new THREE.Fog(0x222222, 40, 80);
 
 const clock = new THREE.Clock();
-const cycleDuration = 5;
+const cycleDuration = 60;
 const dayColor = new THREE.Color(0x87ceeb);
 const nightColor = new THREE.Color(0x0a0a20);
 
