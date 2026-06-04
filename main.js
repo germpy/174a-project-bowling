@@ -19,6 +19,11 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 
 document.body.appendChild(renderer.domElement);
 
+//Shadows
+
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap; // softer shadows
+
 
 
 // CAMERA CONTROLS
@@ -49,6 +54,17 @@ const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
 
 directionalLight.position.set(5, 10, 5);
 
+//shadows
+directionalLight.castShadow = true;
+directionalLight.shadow.mapSize.width = 1024;
+directionalLight.shadow.mapSize.height = 1024;
+directionalLight.shadow.camera.near = 0.5;
+directionalLight.shadow.camera.far = 200;
+directionalLight.shadow.camera.left = -30;
+directionalLight.shadow.camera.right = 30;
+directionalLight.shadow.camera.top = 30;
+directionalLight.shadow.camera.bottom = -30;
+
 scene.add(directionalLight);
 
 
@@ -75,6 +91,14 @@ let currentLane = 1;
 let totalDistance = 0;
 let path = [{d: 0, lane: 1}];
 const POLICE_GAP = 9;
+
+//Jumping
+
+let isJumping = false;
+let jumpVelocity = 0;
+const JUMP_FORCE = 0.25;
+const GRAVITY = 0.008;
+const GROUND_Y = 1.6;
 
 //GROUND
 const grass = new THREE.Mesh(
@@ -140,6 +164,11 @@ ground.rotation.x = -Math.PI / 2;
 
 ground.position.y = 0;
 
+//shadows
+
+ground.receiveShadow = true;
+grass.receiveShadow = true;
+
 scene.add(ground);
 
 // LOAD BANANA CAR
@@ -167,6 +196,13 @@ loader.load(
       wheel.position.add(center);
       bananaWheels.push(wheel);
     }
+
+    bananaCar.traverse(child => {
+  if (child.isMesh) {
+    child.castShadow = true;
+    child.receiveShadow = true;
+  }
+});
 
     scene.add(bananaCar);
 
@@ -215,6 +251,13 @@ loader.load(
       policeWheels.push(wheel);
     }
 
+    policeCar.traverse(child => {
+  if (child.isMesh) {
+    child.castShadow = true;
+    child.receiveShadow = true;
+  }
+});
+
     scene.add(policeCar);
 
   /*  const box = new THREE.BoxHelper(policeCar, 0xff0000);
@@ -258,7 +301,7 @@ for (let i = 0; i < NUM_ROWS; i++) {
   plan.push({
     type: i % 2 ? 'barrier' : 'cone',
     x: lanes[Math.floor(Math.random() * 3)],
-    z: 10 + i * ROW_SPACING,
+    z: 60 + i * ROW_SPACING,
     lane: true,
   });
 }
@@ -267,10 +310,11 @@ for (let i = 0; i < 4; i++) {
   plan.push({
     type: 'street',
     x: side,
-    z: 10 + i * 22,
+    z: 40 + i * 22,
     rotY: side < 0 ? Math.PI : 0,
   });
 }
+
 
 for (const [type, spec] of Object.entries(obstacleSpecs)) {
   loader.load(`./assets/${spec.file}`, gltf => {
@@ -283,12 +327,20 @@ for (const [type, spec] of Object.entries(obstacleSpecs)) {
       if (p.lane) m.userData.lane = true;
       m.userData.startX = p.x;
       m.userData.startZ = p.z;
+
+      // ✅ traverse inside the for loop, while m is in scope
+      m.traverse(child => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+
       scene.add(m);
       obstacles.push(m);
     }
   });
 }
-
 
 function restart() {
   score = 0;
@@ -296,6 +348,10 @@ function restart() {
   gameOver = false;
   currentLane = 1;
   totalDistance = 0;
+
+  isJumping = false;
+  jumpVelocity = 0;
+
   path = [{d: 0, lane: 1}];
   clock.start();
   for (const o of obstacles) {
@@ -330,8 +386,14 @@ window.addEventListener('keydown', (event) => {
     currentLane = Math.min(2, currentLane - 1);
     path.push({d: totalDistance, lane: currentLane});
   }
-
 }
+
+  if ((event.key === ' ' || event.key === 'ArrowUp' || event.key === 'w') && !isJumping) {
+    isJumping = true;
+    jumpVelocity = JUMP_FORCE;
+  }
+
+
 });
 
 function translationMatrix(tx, ty, tz) {
@@ -361,7 +423,21 @@ function animate() {
       const targetX = lanes[currentLane];
       bananaCar.position.x += (targetX - bananaCar.position.x) * 0.15;
       bananaCar.rotation.z = (targetX - bananaCar.position.x) * -0.04;
-      bananaCar.position.y = 1.6 + Math.sin(t * 1) * 0.04;
+
+     // bananaCar.position.y = 1.6 + Math.sin(t * 1) * 0.04;
+
+      if (isJumping) {
+        bananaCar.position.y += jumpVelocity;
+        jumpVelocity -= GRAVITY;
+        if (bananaCar.position.y <= GROUND_Y) {
+          bananaCar.position.y = GROUND_Y;
+          isJumping = false;
+          jumpVelocity = 0;
+        }
+      } else {
+        bananaCar.position.y = GROUND_Y + Math.sin(t * 1) * 0.04; // idle bob
+      }
+
       bananaCar.rotation.x = Math.sin(t * 1) * 0.04;
       camera.position.x = bananaCar.position.x;
       controls.target.x = bananaCar.position.x;
@@ -422,15 +498,17 @@ function animate() {
     if (bananaCar) {
       bananaBox.setFromObject(bananaCar);
       bananaBox.expandByScalar(-0.3);
+
       for (const o of obstacles) {
         if (!o.userData.lane) continue;
-        obstacleBox.setFromObject(o);
+        if (isJumping && bananaCar.position.y > 2.5) continue; // airborne = safe
+          obstacleBox.setFromObject(o);
         if (bananaBox.intersectsBox(obstacleBox)) {
           gameOver = true;
           finalScoreEl.textContent = `Score: ${Math.floor(score)}`;
           overlay.style.display = 'flex';
           break;
-        }
+         }
       }
     }
   }
