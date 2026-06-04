@@ -188,7 +188,6 @@ let targetObject = new THREE.Object3D();
 targetObject.position.set(0,2,20);
 carLight.target = targetObject;
 carLight.add(targetObject);
-//carLight.add(new THREE.SpotLightHelper(carLight));
 
 scene.add(carLight);
 
@@ -234,12 +233,10 @@ loader.load(
   }
 );
 
-
-
 // LOAD POLICE CAR
 
 let policeCar;
-const policeLight = new THREE.SpotLight(0xfffff,100);
+const policeLight = new THREE.SpotLight(0xffffff,100);
 const policeWheels = [];
 
 loader.load(
@@ -295,8 +292,6 @@ loader.load(
     console.error(error);
   }
 );
-
-
 
 const baseSpeed = 0.2;
 let speed = baseSpeed;
@@ -360,6 +355,14 @@ for (const [type, spec] of Object.entries(obstacleSpecs)) {
           child.castShadow = true;
           child.receiveShadow = true;
         }
+        if (p.type == 'street') {
+          const streetLight = new THREE.SpotLight(0xffffff,5, 18, Math.PI / 2, 0, 1);
+          let targetObject = new THREE.Object3D();
+          m.add(targetObject);
+          streetLight.target = targetObject;
+          streetLight.add(new THREE.SpotLightHelper(streetLight));
+          m.add(streetLight);
+      }
       });
 
       scene.add(m);
@@ -506,7 +509,7 @@ function animate() {
     sunMesh.visible = sunY > -0.1;
 
     carLight.intensity = (night)? 1000 - (5000 * dayFactor) : 0;
-
+    
     policeLight.color = (Math.floor(t) % 2 < 1)? red : blue;
 
     for (let i = 0; i < dots.length; i++) {
