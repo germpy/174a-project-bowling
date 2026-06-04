@@ -72,7 +72,7 @@ scene.add(directionalLight);
 scene.fog = new THREE.Fog(0x222222, 40, 80);
 
 const clock = new THREE.Clock();
-const cycleDuration = 60;
+const cycleDuration = 5;
 const dayColor = new THREE.Color(0x87ceeb);
 const nightColor = new THREE.Color(0x0a0a20);
 
@@ -82,6 +82,8 @@ const sunMesh = new THREE.Mesh(
 );
 scene.add(sunMesh);
 
+const red = new THREE.Color("red");
+const blue = new THREE.Color("blue");
 
 
 //LANES
@@ -177,6 +179,19 @@ const loader = new GLTFLoader();
 let bananaCar;
 const bananaWheels = [];
 
+
+const carLight = new THREE.SpotLight(0xffffff, 0);
+carLight.angle = Math.PI/6;
+
+carLight.position.set(0,1,1);
+let targetObject = new THREE.Object3D();
+targetObject.position.set(0,2,20);
+carLight.target = targetObject;
+carLight.add(targetObject);
+//carLight.add(new THREE.SpotLightHelper(carLight));
+
+scene.add(carLight);
+
 loader.load(
   './assets/banana_car.glb',
 
@@ -202,10 +217,9 @@ loader.load(
     child.castShadow = true;
     child.receiveShadow = true;
   }
-
   
 });
-
+    bananaCar.add(carLight);
     scene.add(bananaCar);
 
    /* const box = new THREE.BoxHelper(bananaCar, 0xff0000);
@@ -220,22 +234,12 @@ loader.load(
   }
 );
 
-const carLight = new THREE.SpotLight(0xffffff, 0);
-carLight.angle = Math.PI/6;
-
-carLight.position.set(0,1,1);
-let targetObject = new THREE.Object3D();
-targetObject.position.set(0,2,20);
-carLight.target = targetObject;
-carLight.add(targetObject);
-carLight.add(new THREE.SpotLightHelper(carLight));
-
-scene.add(carLight);
 
 
 // LOAD POLICE CAR
 
 let policeCar;
+const policeLight = new THREE.SpotLight(0xfffff,100);
 const policeWheels = [];
 
 loader.load(
@@ -271,9 +275,15 @@ loader.load(
     child.receiveShadow = true;
   }
 });
+    policeLight.target = carLight;
+
+    // policeLight.position.set(policeCar.position);
+    scene.add(policeLight);
+
+    // policeLight.add(new THREE.SpotLightHelper(policeLight));
+        policeCar.add(policeLight);
 
     scene.add(policeCar);
-
   /*  const box = new THREE.BoxHelper(policeCar, 0xff0000);
 
     scene.add(box);*/
@@ -457,10 +467,6 @@ function animate() {
       bananaCar.rotation.x = Math.sin(t * 1) * 0.04;
       camera.position.x = bananaCar.position.x;
       controls.target.x = bananaCar.position.x;
-      
-       console.log(carLight.target.position);
-      carLight.position.x = bananaCar.position.x;
-      carLight.position.y = bananaCar.position.y;
     }
 
     if (policeCar) {
@@ -499,11 +505,9 @@ function animate() {
     sunMesh.position.copy(directionalLight.position);
     sunMesh.visible = sunY > -0.1;
 
-    if (night) {
-      carLight.intensity = 1000 - (5000 * dayFactor);
-    } else {
-      carLight.intensity = 0;
-    }
+    carLight.intensity = (night)? 1000 - (5000 * dayFactor) : 0;
+
+    policeLight.color = (Math.floor(t) % 2 < 1)? red : blue;
 
     for (let i = 0; i < dots.length; i++) {
       dots[i].position.z = dots[i].position.z < -100 ? 100 : dots[i].position.z - speed;
