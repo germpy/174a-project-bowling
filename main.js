@@ -99,8 +99,12 @@ const POLICE_GAP = 9;
 let isJumping = false;
 let jumpVelocity = 0;
 const JUMP_FORCE = 0.25;
-const GRAVITY = 0.008;
+const GRAVITY = 0.0055;
 const GROUND_Y = 1.6;
+
+let policeLaneIdx = 1;
+let policeJumping = false;
+let policeJumpVel = 0;
 
 //GROUND
 const grass = new THREE.Mesh(
@@ -380,6 +384,9 @@ function restart() {
 
   isJumping = false;
   jumpVelocity = 0;
+  policeLaneIdx = 1;
+  policeJumping = false;
+  policeJumpVel = 0;
 
   path = [{d: 0, lane: 1}];
   clock.start();
@@ -392,7 +399,7 @@ function restart() {
     }
   }
   if (bananaCar) bananaCar.position.x = 0;
-  if (policeCar) policeCar.position.x = 0;
+  if (policeCar) { policeCar.position.x = 0; policeCar.position.y = 0; }
   overlay.style.display = 'none';
 }
 
@@ -420,9 +427,13 @@ window.addEventListener('keydown', (event) => {
   if ((event.key === ' ' || event.key === 'ArrowUp' || event.key === 'w') && !isJumping) {
     isJumping = true;
     jumpVelocity = JUMP_FORCE;
+    path.push({d: totalDistance, jump: true});
   }
 
-
+  if ((event.key === 's' || event.key === 'ArrowDown') && isJumping && jumpVelocity > -0.5) {
+    jumpVelocity = -0.5;
+    path.push({d: totalDistance, fastfall: true});
+  }
 });
 
 function translationMatrix(tx, ty, tz) {
@@ -474,19 +485,26 @@ function animate() {
 
     if (policeCar) {
       const targetDist = totalDistance - POLICE_GAP;
-      while (path.length > 1 && path[1].d <= targetDist) {
-        path.shift();
-      }
-      let policeLane = path[0].lane;
-      for (let i = path.length - 1; i >= 0; i--) {
-        if (path[i].d <= targetDist) {
-          policeLane = path[i].lane;
-          break;
-        }
+      while (path.length > 0 && path[0].d <= targetDist) {
+        const e = path.shift();
+        if (e.lane !== undefined) policeLaneIdx = e.lane;
+        if (e.jump) { policeJumping = true; policeJumpVel = JUMP_FORCE; }
+        if (e.fastfall && policeJumping && policeJumpVel > -0.5) policeJumpVel = -0.5;
       }
 
-      policeCar.position.x += (lanes[policeLane] - policeCar.position.x) * 0.15;
-      policeCar.position.y = Math.sin(t * 10 + 1) * 0.01;
+      policeCar.position.x += (lanes[policeLaneIdx] - policeCar.position.x) * 0.15;
+
+      if (policeJumping) {
+        policeCar.position.y += policeJumpVel;
+        policeJumpVel -= GRAVITY;
+        if (policeCar.position.y <= 0) {
+          policeCar.position.y = 0;
+          policeJumping = false;
+          policeJumpVel = 0;
+        }
+      } else {
+        policeCar.position.y = Math.sin(t * 10 + 1) * 0.01;
+      }
       policeCar.rotation.x = Math.sin(t * 7 + 0.5) * 0.01;
     }
 
