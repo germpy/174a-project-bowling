@@ -319,15 +319,18 @@ const obstacleSpecs = {
   cone:    { file: 'traffic_cone.glb',    scale: 10,  y: 0.75 },
   barrier: { file: 'traffic_barrier.glb', scale: 0.5, y: 2    },
   street:  { file: 'streetlight.glb',     scale: 12,  y: 0    },
+  cyber:   {file: 'cyber_truck.glb', scale: 30, y: 2}, 
 };
 
 const plan = [];
 for (let i = 0; i < NUM_ROWS; i++) {
   plan.push({
-    type: i % 2 ? 'barrier' : 'cone',
+   // type: i % 2 ? 'barrier' : 'cone',
+    type: i % 3 === 0 ? 'cone' : i % 3 === 1 ? 'barrier' : 'cyber', 
     x: lanes[Math.floor(Math.random() * 3)],
     z: 60 + i * ROW_SPACING,
     lane: true,
+    rotY: (i % 3 === 2) ? (Math.PI / 2 - 0.3) : 0
   });
 }
 for (let i = 0; i < 4; i++) {
@@ -350,6 +353,7 @@ for (const [type, spec] of Object.entries(obstacleSpecs)) {
       m.position.set(p.x, spec.y, p.z);
       if (p.rotY) m.rotation.y = p.rotY;
       if (p.lane) m.userData.lane = true;
+      m.userData.type = type;
       m.userData.startX = p.x;
       m.userData.startZ = p.z;
 
@@ -553,8 +557,13 @@ function animate() {
 
       for (const o of obstacles) {
         if (!o.userData.lane) continue;
-        if (isJumping && bananaCar.position.y > 2.5) continue; // airborne = safe
+       // if (isJumping && bananaCar.position.y > 2.5) continue; // airborne = safe
+       if (isJumping && bananaCar.position.y > 2.5 && o.userData.type !== 'cyber') continue;
           obstacleBox.setFromObject(o);
+          if (o.userData.type === 'cyber') {
+            obstacleBox.min.x = o.position.x - 2.5;
+            obstacleBox.max.x = o.position.x + 2.5;
+          }
         if (bananaBox.intersectsBox(obstacleBox)) {
           gameOver = true;
           finalScoreEl.textContent = `Score: ${Math.floor(score)}`;
